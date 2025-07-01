@@ -13,41 +13,46 @@ app.get('/proxy', async (req, res) => {
     }
 
     try {
-        // Get metadata
-        const head = await fetch(url, { method: 'HEAD' });
-        const contentLength = parseInt(head.headers.get('content-length'), 10);
-        const contentType = head.headers.get('content-type') || 'audio/mpeg';
-
-        const headers = {
-            'Content-Type': contentType,
-            'Accept-Ranges': 'bytes',
-            'Content-Disposition': 'inline', // Prevent download popup
-        };
+        // Follow Dropbox redirects manually
+        const finalRes = await fetch(url, { method: 'HEAD', redirect: 'follow' });
+        const contentLength = parseInt(finalRes.headers.get('content-length'), 10);
+        const contentType = finalRes.headers.get('content-type') || 'audio/mpeg';
 
         if (range && !isNaN(contentLength)) {
             const [startStr, endStr] = range.replace(/bytes=/, '').split('-');
             const start = parseInt(startStr, 10);
             const end = endStr ? parseInt(endStr, 10) : contentLength - 1;
-            const chunkSize = end - start + 1;
 
-            headers['Content-Range'] = `bytes ${start}-${end}/${contentLength}`;
-            headers['Content-Length'] = chunkSize;
+            const headers = {
+                'Content-Range': `bytes ${start}-${end}/${contentLength}`,
+                'Accept-Ranges': 'bytes',
+                'Content-Length': end - start + 1,
+                'Content-Type': contentType,
+                'Content-Disposition': 'inline',
+            };
 
             res.writeHead(206, headers);
 
             const stream = await fetch(url, {
                 headers: { Range: `bytes=${start}-${end}` },
+                redirect: 'follow'
             });
 
             stream.body.pipe(res);
         } else {
+            const headers = {
+                'Content-Type': contentType,
+                'Accept-Ranges': 'bytes',
+                'Content-Disposition': 'inline',
+            };
+
             if (!isNaN(contentLength)) {
                 headers['Content-Length'] = contentLength;
             }
 
             res.writeHead(200, headers);
 
-            const stream = await fetch(url);
+            const stream = await fetch(url, { redirect: 'follow' });
             stream.body.pipe(res);
         }
     } catch (err) {
@@ -57,5 +62,5 @@ app.get('/proxy', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`🎧 MP3 proxy running at http://localhost:${PORT}`);
+    console.log(`✅ Dropbox MP3 proxy running at http://localhost:${PORT}`);
 });
