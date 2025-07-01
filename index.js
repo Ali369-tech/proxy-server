@@ -36,6 +36,10 @@ app.get('/proxy', async (req, res) => {
         headers: { Range: `bytes=${startByte}-${endByte}` }
       });
 
+      if (!streamRes.ok) {
+        throw new Error('Failed to fetch partial content');
+      }
+
       streamRes.body.pipe(res);
     } else {
       const headers = {
@@ -50,6 +54,11 @@ app.get('/proxy', async (req, res) => {
       res.writeHead(200, headers);
 
       const streamRes = await fetch(url);
+
+      if (!streamRes.ok) {
+        throw new Error('Failed to fetch full content');
+      }
+
       streamRes.body.pipe(res);
     }
   } catch (err) {
