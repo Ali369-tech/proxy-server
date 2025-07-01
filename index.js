@@ -12,29 +12,21 @@ app.get('/proxy', async (req, res) => {
     const headRes = await fetch(url, { method: 'HEAD' });
 
     const contentLengthHeader = headRes.headers.get('content-length');
-    const contentType = headRes.headers.get('content-type') || 'application/octet-stream';
-
+    const contentType = headRes.headers.get('content-type') || 'audio/mpeg';
     const contentLength = contentLengthHeader ? parseInt(contentLengthHeader, 10) : null;
 
-    const headers = {
-      'Content-Type': contentType,
-      'Accept-Ranges': 'bytes',
-    };
-
     if (range && contentLength !== null) {
-      // Parse range safely
       const [start, end] = range.replace(/bytes=/, '').split('-');
       const startByte = parseInt(start, 10);
       const endByte = end ? parseInt(end, 10) : contentLength - 1;
-
-      if (isNaN(startByte) || isNaN(endByte)) {
-        return res.status(400).send('Invalid range values.');
-      }
-
       const chunkSize = endByte - startByte + 1;
 
-      headers['Content-Range'] = `bytes ${startByte}-${endByte}/${contentLength}`;
-      headers['Content-Length'] = chunkSize;
+      const headers = {
+        'Content-Range': `bytes ${startByte}-${endByte}/${contentLength}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': chunkSize,
+        'Content-Type': contentType
+      };
 
       res.writeHead(206, headers);
 
@@ -43,17 +35,20 @@ app.get('/proxy', async (req, res) => {
       });
 
       streamRes.body.pipe(res);
+
     } else {
-      // Send full file
-      if (contentLength !== null) {
-        headers['Content-Length'] = contentLength;
-      }
+      const headers = {
+        'Content-Length': contentLength || undefined,
+        'Content-Type': contentType,
+        'Accept-Ranges': 'bytes'
+      };
 
       res.writeHead(200, headers);
 
       const streamRes = await fetch(url);
       streamRes.body.pipe(res);
     }
+
   } catch (err) {
     console.error('Proxy error:', err);
     res.status(500).send('Proxy error: ' + err.message);
