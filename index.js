@@ -12,18 +12,25 @@ app.get('/proxy', async (req, res) => {
 
   try {
     const headRes = await fetch(url, { method: 'HEAD' });
+
     const contentLength = parseInt(headRes.headers.get('content-length'), 10);
     const contentType = headRes.headers.get('content-type') || 'audio/mpeg';
 
     const headers = {
       'Content-Type': contentType,
-      'Accept-Ranges': 'bytes',
+      'Accept-Ranges': 'bytes'
     };
 
-    if (range && contentLength) {
+    if (range && !isNaN(contentLength)) {
       const [startStr, endStr] = range.replace(/bytes=/, '').split('-');
       const start = parseInt(startStr, 10);
       const end = endStr ? parseInt(endStr, 10) : contentLength - 1;
+
+      if (isNaN(start) || isNaN(end) || start >= contentLength) {
+        res.status(416).send('Requested Range Not Satisfiable');
+        return;
+      }
+
       const chunkSize = end - start + 1;
 
       headers['Content-Range'] = `bytes ${start}-${end}/${contentLength}`;
@@ -31,18 +38,20 @@ app.get('/proxy', async (req, res) => {
 
       res.writeHead(206, headers);
 
-      const stream = await fetch(url, {
+      const streamRes = await fetch(url, {
         headers: { Range: `bytes=${start}-${end}` }
       });
 
-      stream.body.pipe(res);
+      streamRes.body.pipe(res);
     } else {
-      if (contentLength) headers['Content-Length'] = contentLength;
+      if (!isNaN(contentLength)) {
+        headers['Content-Length'] = contentLength;
+      }
 
       res.writeHead(200, headers);
 
-      const stream = await fetch(url);
-      stream.body.pipe(res);
+      const streamRes = await fetch(url);
+      streamRes.body.pipe(res);
     }
   } catch (err) {
     console.error('Proxy error:', err);
