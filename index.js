@@ -11,62 +11,47 @@ app.get('/proxy', async (req, res) => {
   if (!url) return res.status(400).send('Missing url parameter');
 
   try {
-    const headRes = await fetch(url, { method: 'HEAD' });
+    // Fetch only headers to get content info
+    const head = await fetch(url, { method: 'HEAD' });
+    const contentLength = parseInt(head.headers.get('content-length'), 10);
+    const contentType = head.headers.get('content-type') || 'audio/mpeg';
 
-    const contentLengthHeader = headRes.headers.get('content-length');
-    const contentType = headRes.headers.get('content-type') || 'audio/mpeg';
-    const contentLength = contentLengthHeader ? parseInt(contentLengthHeader, 10) : null;
+    const headers = {
+      'Content-Type': contentType,
+      'Accept-Ranges': 'bytes'
+    };
 
-    if (range && contentLength !== null) {
-      const [start, end] = range.replace(/bytes=/, '').split('-');
-      const startByte = parseInt(start, 10);
-      const endByte = end ? parseInt(end, 10) : contentLength - 1;
-      const chunkSize = endByte - startByte + 1;
+    if (range && contentLength) {
+      // Handle range requests
+      const [startStr, endStr] = range.replace(/bytes=/, '').split('-');
+      const start = parseInt(startStr, 10);
+      const end = endStr ? parseInt(endStr, 10) : contentLength - 1;
+      const chunkSize = end - start + 1;
 
-      const headers = {
-        'Content-Range': `bytes ${startByte}-${endByte}/${contentLength}`,
-        'Accept-Ranges': 'bytes',
-        'Content-Length': chunkSize,
-        'Content-Type': contentType
-      };
+      headers['Content-Range'] = `bytes ${start}-${end}/${contentLength}`;
+      headers['Content-Length'] = chunkSize;
 
       res.writeHead(206, headers);
 
-      const streamRes = await fetch(url, {
-        headers: { Range: `bytes=${startByte}-${endByte}` }
+      const stream = await fetch(url, {
+        headers: { Range: `bytes=${start}-${end}` }
       });
 
-      if (!streamRes.ok) {
-        throw new Error('Failed to fetch partial content');
-      }
-
-      streamRes.body.pipe(res);
+      stream.body.pipe(res);
     } else {
-      const headers = {
-        'Content-Type': contentType,
-        'Accept-Ranges': 'bytes'
-      };
-
-      if (typeof contentLength === 'number' && !isNaN(contentLength)) {
-        headers['Content-Length'] = contentLength;
-      }
-
+      // No range: stream entire file
+      if (contentLength) headers['Content-Length'] = contentLength;
       res.writeHead(200, headers);
 
-      const streamRes = await fetch(url);
-
-      if (!streamRes.ok) {
-        throw new Error('Failed to fetch full content');
-      }
-
-      streamRes.body.pipe(res);
+      const stream = await fetch(url);
+      stream.body.pipe(res);
     }
   } catch (err) {
-    console.error('Proxy error:', err);
+    console.error('Proxy error:', err.message);
     res.status(500).send('Proxy error: ' + err.message);
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`✅ MP3 Proxy Server running on port ${PORT}`);
+  console.log(`✅ MP3 Proxy Server is running at http://localhost:${PORT}`);
 });
