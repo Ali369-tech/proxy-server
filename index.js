@@ -39,10 +39,13 @@ app.get('/proxy', async (req, res) => {
       streamRes.body.pipe(res);
     } else {
       const headers = {
-        'Content-Length': contentLength || undefined,
         'Content-Type': contentType,
         'Accept-Ranges': 'bytes'
       };
+
+      if (typeof contentLength === 'number' && !isNaN(contentLength)) {
+        headers['Content-Length'] = contentLength;
+      }
 
       res.writeHead(200, headers);
 
